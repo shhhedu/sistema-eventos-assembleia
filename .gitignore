@@ -7,3 +7,5 @@ eventos.db
 .DS_Store
 Thumbs.db
 npm-debug.log*
+
+prompt.txt
