@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Administrador - Sistema de Eventos</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body class="admin-page">
+    <main id="loginScreen" class="login-screen">
+      <section class="login-box" aria-labelledby="loginTitle">
+        <div class="login-brand">
+          <span class="brand-mark large">AD</span>
+          <h1 id="loginTitle">Assembleia de Deus</h1>
+          <p>Área do Administrador</p>
+        </div>
+
+        <form id="loginForm" class="stack-form">
+          <label for="usuario">Usuário</label>
+          <input id="usuario" name="usuario" type="text" value="admin" autocomplete="username" required />
+
+          <label for="senha">Senha</label>
+          <input id="senha" name="senha" type="password" value="admin123" autocomplete="current-password" required />
+
+          <button class="primary-button full" type="submit">Entrar</button>
+          <p id="loginMessage" class="feedback light" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <div id="adminShell" class="admin-shell" hidden>
+      <aside class="admin-sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark">AD</span>
+          <div>
+            <strong>Administrador</strong>
+            <small>Eventos da igreja</small>
+          </div>
+        </div>
+
+        <nav class="admin-nav" aria-label="Menu administrativo">
+          <button class="nav-button is-active" type="button" data-section="eventsSection">Eventos</button>
+          <button class="nav-button" type="button" data-section="presencesSection">Presenças</button>
+        </nav>
+
+        <button id="logoutButton" class="ghost-button logout-button" type="button">Sair</button>
+      </aside>
+
+      <section class="admin-main">
+        <div class="admin-topbar">
+          <div>
+            <p class="eyebrow dark">Painel administrativo</p>
+            <h1>Sistema de Eventos</h1>
+          </div>
+          <a class="secondary-button" href="/">Ver site</a>
+        </div>
+
+        <section id="eventsSection" class="admin-section">
+          <div class="panel-heading">
+            <div>
+              <h2>Eventos</h2>
+              <p>Crie, edite e acompanhe os eventos cadastrados.</p>
+            </div>
+            <button id="newEventButton" class="primary-button" type="button">+ Novo Evento</button>
+          </div>
+
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Imagem</th>
+                  <th>Título</th>
+                  <th>Data</th>
+                  <th>Horário</th>
+                  <th>Local</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="adminEventsTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="presencesSection" class="admin-section" hidden>
+          <div class="panel-heading">
+            <div>
+              <h2>Presenças</h2>
+              <p id="presenceSubtitle">Selecione um evento para visualizar os participantes.</p>
+            </div>
+            <select id="presenceEventSelect" class="compact-select" aria-label="Selecionar evento"></select>
+          </div>
+
+          <div class="stats-strip">
+            <span>Participantes Confirmados</span>
+            <strong id="presenceTotal">Total de Confirmados: 0</strong>
+          </div>
+
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Telefone</th>
+                  <th>Data da Confirmação</th>
+                </tr>
+              </thead>
+              <tbody id="presencesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <div id="eventFormModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="eventFormTitle">
+      <div class="modal-backdrop" data-close-event-form></div>
+      <section class="modal-panel form-modal">
+        <button class="icon-button modal-close" type="button" data-close-event-form aria-label="Fechar">×</button>
+        <h2 id="eventFormTitle">Novo Evento</h2>
+
+        <form id="eventForm" class="stack-form">
+          <input id="eventId" type="hidden" />
+
+          <label for="eventTitle">Título</label>
+          <input id="eventTitle" name="titulo" type="text" required />
+
+          <div class="form-grid">
+            <div>
+              <label for="eventDate">Data</label>
+              <input id="eventDate" name="data" type="date" required />
+            </div>
+            <div>
+              <label for="eventTime">Horário</label>
+              <input id="eventTime" name="horario" type="time" required />
+            </div>
+          </div>
+
+          <label for="eventPlace">Local</label>
+          <input id="eventPlace" name="local" type="text" required />
+
+          <label for="eventBanner">Banner</label>
+          <select id="eventBanner" name="banner"></select>
+          <img id="bannerPreview" class="banner-preview" src="/assets/img/banner-eventos.jpeg" alt="" />
+
+          <label for="eventDescription">Descrição</label>
+          <textarea id="eventDescription" name="descricao" rows="5" required></textarea>
+
+          <button class="primary-button full" type="submit">Salvar Evento</button>
+          <p id="eventFormMessage" class="feedback" aria-live="polite"></p>
+        </form>
+      </section>
+    </div>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>
