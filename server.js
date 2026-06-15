@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const multer = require('multer');
 const path = require('path');
 const {
   all,
@@ -13,7 +15,12 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_USER = 'admin';
 const ADMIN_PASSWORD = 'admin123';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'assembleia-admin-token';
-const DEFAULT_BANNER = '/assets/img/banner-eventos.jpeg';
+const EVENT_UPLOAD_DIR = path.join(__dirname, 'public', 'assets', 'uploads', 'eventos');
+const PUBLIC_EVENT_UPLOAD_PATH = '/assets/uploads/eventos';
+const ALLOWED_BANNER_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const ALLOWED_BANNER_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+fs.mkdirSync(EVENT_UPLOAD_DIR, { recursive: true });
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,6 +31,97 @@ function cleanText(value) {
 
 function cleanLongText(value) {
   return String(value || '').trim();
+}
+
+function sanitizeFileName(value) {
+  return String(value || 'banner')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 70) || 'banner';
+}
+
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, callback) => {
+    callback(null, EVENT_UPLOAD_DIR);
+  },
+  filename: (req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const basename = sanitizeFileName(path.basename(file.originalname, extension));
+    const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    callback(null, `${basename}-${suffix}${extension}`);
+  },
+});
+
+const uploadBanner = multer({
+  storage: bannerStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+
+    if (!ALLOWED_BANNER_EXTENSIONS.has(extension) || !ALLOWED_BANNER_MIMES.has(file.mimetype)) {
+      callback(new Error('Envie uma imagem JPG, JPEG, PNG ou WEBP para o banner.'));
+      return;
+    }
+
+    callback(null, true);
+  },
+}).single('bannerArquivo');
+
+function parseEventUpload(req, res, next) {
+  uploadBanner(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'O banner deve ter no maximo 5 MB.' });
+    }
+
+    return res.status(400).json({ error: error.message || 'Nao foi possivel enviar o banner.' });
+  });
+}
+
+function uploadedBannerPath(file) {
+  return file ? `${PUBLIC_EVENT_UPLOAD_PATH}/${file.filename}` : '';
+}
+
+function removeUploadedFile(file) {
+  if (!file) {
+    return;
+  }
+
+  fs.unlink(file.path, (error) => {
+    if (error && error.code !== 'ENOENT') {
+      console.error('Erro ao remover upload descartado:', error);
+    }
+  });
+}
+
+function formatBrazilianPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+
+  if (!digits) {
+    return { telefone: '' };
+  }
+
+  if (digits.length > 11 || digits.length < 10) {
+    return { error: 'Informe um telefone brasileiro com DDD, usando 10 ou 11 numeros.' };
+  }
+
+  if (digits.length === 11) {
+    return {
+      telefone: `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`,
+    };
+  }
+
+  return {
+    telefone: `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`,
+  };
 }
 
 function requireAdmin(req, res, next) {
@@ -44,7 +142,7 @@ function validateEventPayload(body) {
     data: cleanText(body.data),
     horario: cleanText(body.horario),
     local: cleanText(body.local),
-    banner: cleanText(body.banner) || DEFAULT_BANNER,
+    banner: cleanText(body.banner),
   };
 
   if (!evento.titulo || !evento.descricao || !evento.data || !evento.horario || !evento.local) {
@@ -72,7 +170,13 @@ app.get('/api/eventos/:id', (req, res) => {
 app.post('/api/presencas', (req, res) => {
   const eventoId = Number(req.body.eventoId);
   const nome = cleanText(req.body.nome);
-  const telefone = cleanText(req.body.telefone);
+  const telefoneFormatado = formatBrazilianPhone(req.body.telefone);
+
+  if (telefoneFormatado.error) {
+    return res.status(400).json({ error: telefoneFormatado.error });
+  }
+
+  const telefone = telefoneFormatado.telefone;
 
   if (!eventoId || !nome) {
     return res.status(400).json({ error: 'Informe o evento e o nome completo.' });
@@ -118,44 +222,50 @@ app.post('/api/admin/login', (req, res) => {
   return res.status(401).json({ error: 'Usuario ou senha invalidos.' });
 });
 
-app.post('/api/admin/eventos', requireAdmin, (req, res) => {
+app.post('/api/admin/eventos', requireAdmin, parseEventUpload, (req, res) => {
   const { evento, error } = validateEventPayload(req.body);
 
   if (error) {
+    removeUploadedFile(req.file);
     return res.status(400).json({ error });
   }
 
+  const banner = uploadedBannerPath(req.file) || evento.banner;
   const result = run(
     `INSERT INTO eventos (titulo, descricao, data, horario, local, banner)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, evento.banner],
+    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, banner],
   );
 
-  return res.status(201).json({ id: result.id, ...evento });
+  return res.status(201).json({ id: result.id, ...evento, banner });
 });
 
-app.put('/api/admin/eventos/:id', requireAdmin, (req, res) => {
+app.put('/api/admin/eventos/:id', requireAdmin, parseEventUpload, (req, res) => {
   const id = Number(req.params.id);
   const atual = get('SELECT id FROM eventos WHERE id = ?', [id]);
 
   if (!atual) {
+    removeUploadedFile(req.file);
     return res.status(404).json({ error: 'Evento nao encontrado.' });
   }
 
   const { evento, error } = validateEventPayload(req.body);
 
   if (error) {
+    removeUploadedFile(req.file);
     return res.status(400).json({ error });
   }
+
+  const banner = uploadedBannerPath(req.file) || evento.banner;
 
   run(
     `UPDATE eventos
      SET titulo = ?, descricao = ?, data = ?, horario = ?, local = ?, banner = ?
      WHERE id = ?`,
-    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, evento.banner, id],
+    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, banner, id],
   );
 
-  return res.json({ id, ...evento });
+  return res.json({ id, ...evento, banner });
 });
 
 app.delete('/api/admin/eventos/:id', requireAdmin, (req, res) => {

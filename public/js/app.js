@@ -1,5 +1,3 @@
-const fallbackBanner = '/assets/img/banner-eventos.jpeg';
-
 const elements = {
   eventsGrid: document.querySelector('#eventsGrid'),
   loadingState: document.querySelector('#loadingState'),
@@ -30,8 +28,89 @@ function escapeHtml(value) {
   });
 }
 
-function imageUrl(value) {
-  return String(value || '').trim() || fallbackBanner;
+function imageUrl(evento) {
+  if (evento && typeof evento === 'object') {
+    return String(evento.banner || '').trim();
+  }
+
+  return String(evento || '').trim();
+}
+
+function showBannerFallback(image, title) {
+  const wrapper = image.closest('.event-card__image, .detail-banner, .banner-preview-wrap');
+  const fallback = wrapper ? wrapper.querySelector('.banner-fallback') : null;
+
+  image.hidden = true;
+
+  if (fallback) {
+    const label = fallback.querySelector('span');
+    if (label) {
+      label.textContent = title || 'Evento';
+    }
+    fallback.hidden = false;
+  }
+}
+
+function resetBannerImage(image, title) {
+  const wrapper = image.closest('.event-card__image, .detail-banner, .banner-preview-wrap');
+  const fallback = wrapper ? wrapper.querySelector('.banner-fallback') : null;
+
+  image.hidden = false;
+  image.onerror = () => showBannerFallback(image, title);
+
+  if (fallback) {
+    const label = fallback.querySelector('span');
+    if (label) {
+      label.textContent = title || 'Evento';
+    }
+    fallback.hidden = true;
+  }
+}
+
+function setBannerImage(image, source, title) {
+  if (!source) {
+    image.removeAttribute('src');
+    showBannerFallback(image, title);
+    return;
+  }
+
+  resetBannerImage(image, title);
+  image.src = source;
+}
+
+function mostrarFallbackBanner(image) {
+  showBannerFallback(image, image.dataset.title || 'Evento');
+}
+
+function phoneDigits(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 11);
+}
+
+function formatBrazilianPhone(value) {
+  const digits = phoneDigits(value);
+
+  if (!digits) {
+    return '';
+  }
+
+  if (digits.length <= 2) {
+    return `(${digits}`;
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function isCompleteBrazilianPhone(value) {
+  const digits = phoneDigits(value);
+  return digits.length === 0 || digits.length === 10 || digits.length === 11;
 }
 
 function formatDateParts(dateValue) {
@@ -92,10 +171,15 @@ function renderEvents(eventos) {
   elements.eventsGrid.innerHTML = eventos
     .map((evento) => {
       const date = formatDateParts(evento.data);
+      const banner = imageUrl(evento);
+      const imageHidden = banner ? '' : 'hidden';
+      const imageSource = banner ? `src="${escapeHtml(banner)}"` : '';
+      const fallbackHidden = banner ? 'hidden' : '';
       return `
         <article class="event-card">
           <div class="event-card__image">
-            <img src="${escapeHtml(imageUrl(evento.banner))}" alt="" onerror="this.onerror=null;this.src='${fallbackBanner}'" />
+            <img ${imageSource} alt="" data-title="${escapeHtml(evento.titulo)}" onerror="mostrarFallbackBanner(this)" ${imageHidden} />
+            <div class="banner-fallback" ${fallbackHidden}><span>${escapeHtml(evento.titulo)}</span></div>
             <div class="date-badge">${dateBadge(evento)}</div>
           </div>
           <div class="event-card__body">
@@ -139,11 +223,7 @@ async function openEvent(eventId) {
     }
 
     const date = formatDateParts(evento.data);
-    elements.modalBanner.src = imageUrl(evento.banner);
-    elements.modalBanner.onerror = () => {
-      elements.modalBanner.onerror = null;
-      elements.modalBanner.src = fallbackBanner;
-    };
+    setBannerImage(elements.modalBanner, imageUrl(evento), evento.titulo);
     elements.modalDateBadge.innerHTML = dateBadge(evento);
     elements.modalTitle.textContent = evento.titulo;
     elements.modalMeta.innerHTML = [
@@ -176,10 +256,18 @@ async function submitPresence(event) {
   event.preventDefault();
   setFeedback(elements.presenceMessage, 'Registrando presença...', '');
 
+  const telefone = formatBrazilianPhone(elements.presencePhone.value);
+  elements.presencePhone.value = telefone;
+
+  if (!isCompleteBrazilianPhone(telefone)) {
+    setFeedback(elements.presenceMessage, 'Informe um telefone brasileiro com DDD ou deixe o campo vazio.', 'error');
+    return;
+  }
+
   const payload = {
     eventoId: Number(elements.presenceEventId.value),
     nome: elements.presenceName.value,
-    telefone: elements.presencePhone.value,
+    telefone,
   };
 
   try {
@@ -206,6 +294,36 @@ async function submitPresence(event) {
   }
 }
 
+function handlePhoneInput() {
+  elements.presencePhone.value = formatBrazilianPhone(elements.presencePhone.value);
+}
+
+function handlePhoneKeydown(event) {
+  const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+
+  if (allowedKeys.includes(event.key) || event.ctrlKey || event.metaKey) {
+    return;
+  }
+
+  if (event.key.length === 1 && !/\d/.test(event.key)) {
+    event.preventDefault();
+    return;
+  }
+
+  const digits = phoneDigits(elements.presencePhone.value);
+  const hasSelection = elements.presencePhone.selectionStart !== elements.presencePhone.selectionEnd;
+
+  if (event.key.length === 1 && digits.length >= 11 && !hasSelection) {
+    event.preventDefault();
+  }
+}
+
+function handlePhonePaste(event) {
+  event.preventDefault();
+  const pasted = (event.clipboardData || window.clipboardData).getData('text');
+  elements.presencePhone.value = formatBrazilianPhone(pasted);
+}
+
 elements.eventsGrid.addEventListener('click', (event) => {
   const button = event.target.closest('[data-event-id]');
   if (button) {
@@ -224,4 +342,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 elements.presenceForm.addEventListener('submit', submitPresence);
+elements.presencePhone.addEventListener('input', handlePhoneInput);
+elements.presencePhone.addEventListener('keydown', handlePhoneKeydown);
+elements.presencePhone.addEventListener('paste', handlePhonePaste);
 loadEvents();

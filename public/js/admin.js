@@ -1,16 +1,8 @@
 const adminState = {
   token: localStorage.getItem('adminToken') || '',
   eventos: [],
+  bannerPreviewUrl: '',
 };
-
-const fallbackBannerAdmin = '/assets/img/banner-eventos.jpeg';
-const bannerOptions = [
-  { value: '/assets/img/banner-eventos.jpeg', label: 'Banner de eventos' },
-  { value: '/assets/img/banner-culto-familia.jpeg', label: 'Culto da Familia' },
-  { value: '/assets/img/admin-eventos.jpeg', label: 'Referencia painel eventos' },
-  { value: '/assets/img/login-referencia.jpeg', label: 'Referencia login' },
-  { value: '/assets/img/presencas-referencia.jpeg', label: 'Referencia presencas' },
-];
 
 const admin = {
   loginScreen: document.querySelector('#loginScreen'),
@@ -31,6 +23,7 @@ const admin = {
   eventTime: document.querySelector('#eventTime'),
   eventPlace: document.querySelector('#eventPlace'),
   eventBanner: document.querySelector('#eventBanner'),
+  eventBannerFile: document.querySelector('#eventBannerFile'),
   bannerPreview: document.querySelector('#bannerPreview'),
   eventDescription: document.querySelector('#eventDescription'),
   eventFormMessage: document.querySelector('#eventFormMessage'),
@@ -53,8 +46,58 @@ function escapeHtml(value) {
   });
 }
 
-function imageUrl(value) {
-  return String(value || '').trim() || fallbackBannerAdmin;
+function imageUrl(evento) {
+  if (evento && typeof evento === 'object') {
+    return String(evento.banner || '').trim();
+  }
+
+  return String(evento || '').trim();
+}
+
+function showBannerFallback(image, title) {
+  const wrapper = image.closest('.thumb-banner, .banner-preview-wrap');
+  const fallback = wrapper ? wrapper.querySelector('.banner-fallback') : null;
+
+  image.hidden = true;
+
+  if (fallback) {
+    const label = fallback.querySelector('span');
+    if (label) {
+      label.textContent = title || 'Banner do evento';
+    }
+    fallback.hidden = false;
+  }
+}
+
+function resetBannerImage(image, title) {
+  const wrapper = image.closest('.thumb-banner, .banner-preview-wrap');
+  const fallback = wrapper ? wrapper.querySelector('.banner-fallback') : null;
+
+  image.hidden = false;
+  image.onerror = () => showBannerFallback(image, title);
+
+  if (fallback) {
+    const label = fallback.querySelector('span');
+    if (label) {
+      label.textContent = title || 'Banner do evento';
+    }
+    fallback.hidden = true;
+  }
+}
+
+function setBannerImage(image, source, title) {
+  if (!source) {
+    image.removeAttribute('src');
+    showBannerFallback(image, title);
+    return;
+  }
+
+  resetBannerImage(image, title);
+  image.src = source;
+}
+
+function mostrarFallbackBanner(image) {
+  showBannerFallback(image, image.dataset.title || 'Banner do evento');
 }
 
 function setMessage(element, message, type) {
@@ -139,12 +182,6 @@ function switchSection(sectionId) {
   });
 }
 
-function renderBannerOptions() {
-  admin.eventBanner.innerHTML = bannerOptions
-    .map((banner) => `<option value="${escapeHtml(banner.value)}">${escapeHtml(banner.label)}</option>`)
-    .join('');
-}
-
 function renderEventsTable() {
   if (adminState.eventos.length === 0) {
     admin.adminEventsTable.innerHTML = '<tr><td colspan="6">Nenhum evento cadastrado.</td></tr>';
@@ -154,9 +191,20 @@ function renderEventsTable() {
 
   admin.adminEventsTable.innerHTML = adminState.eventos
     .map(
-      (evento) => `
-        <tr>
-          <td><img class="thumb-image" src="${escapeHtml(imageUrl(evento.banner))}" alt="" onerror="this.onerror=null;this.src='${fallbackBannerAdmin}'" /></td>
+      (evento) => {
+        const banner = imageUrl(evento);
+        const imageHidden = banner ? '' : 'hidden';
+        const imageSource = banner ? `src="${escapeHtml(banner)}"` : '';
+        const fallbackHidden = banner ? 'hidden' : '';
+
+        return `
+          <tr>
+            <td>
+              <div class="thumb-banner">
+                <img class="thumb-image" ${imageSource} alt="" data-title="${escapeHtml(evento.titulo)}" onerror="mostrarFallbackBanner(this)" ${imageHidden} />
+              <div class="banner-fallback thumb-fallback" ${fallbackHidden}><span>${escapeHtml(evento.titulo)}</span></div>
+            </div>
+          </td>
           <td><strong>${escapeHtml(evento.titulo)}</strong></td>
           <td>${escapeHtml(formatDate(evento.data))}</td>
           <td>${escapeHtml(evento.horario)}</td>
@@ -169,7 +217,8 @@ function renderEventsTable() {
             </div>
           </td>
         </tr>
-      `,
+      `;
+      },
     )
     .join('');
 
@@ -187,6 +236,35 @@ async function loadEvents() {
   }
 }
 
+function currentFormBannerEvent() {
+  return {
+    id: Number(admin.eventId.value) || Date.now(),
+    titulo: admin.eventTitle.value || 'Banner do evento',
+    banner: admin.eventBanner.value.trim(),
+  };
+}
+
+function revokeBannerPreviewUrl() {
+  if (adminState.bannerPreviewUrl) {
+    URL.revokeObjectURL(adminState.bannerPreviewUrl);
+    adminState.bannerPreviewUrl = '';
+  }
+}
+
+function updateBannerPreview() {
+  revokeBannerPreviewUrl();
+
+  const file = admin.eventBannerFile.files[0];
+  if (file) {
+    adminState.bannerPreviewUrl = URL.createObjectURL(file);
+    setBannerImage(admin.bannerPreview, adminState.bannerPreviewUrl, admin.eventTitle.value || file.name);
+    return;
+  }
+
+  const evento = currentFormBannerEvent();
+  setBannerImage(admin.bannerPreview, imageUrl(evento), evento.titulo);
+}
+
 function openEventForm(evento) {
   const isEdit = Boolean(evento);
   admin.eventFormTitle.textContent = isEdit ? 'Editar Evento' : 'Novo Evento';
@@ -196,8 +274,9 @@ function openEventForm(evento) {
   admin.eventTime.value = isEdit ? evento.horario : '';
   admin.eventPlace.value = isEdit ? evento.local : '';
   admin.eventDescription.value = isEdit ? evento.descricao : '';
-  admin.eventBanner.value = isEdit ? imageUrl(evento.banner) : fallbackBannerAdmin;
-  admin.bannerPreview.src = admin.eventBanner.value;
+  admin.eventBanner.value = isEdit ? String(evento.banner || '') : '';
+  admin.eventBannerFile.value = '';
+  updateBannerPreview();
   setMessage(admin.eventFormMessage, '', '');
 
   admin.eventFormModal.classList.add('is-open');
@@ -213,14 +292,21 @@ function closeEventForm() {
 }
 
 function getEventPayload() {
-  return {
-    titulo: admin.eventTitle.value,
-    data: admin.eventDate.value,
-    horario: admin.eventTime.value,
-    local: admin.eventPlace.value,
-    banner: admin.eventBanner.value,
-    descricao: admin.eventDescription.value,
-  };
+  const formData = new FormData();
+  const file = admin.eventBannerFile.files[0];
+
+  formData.append('titulo', admin.eventTitle.value);
+  formData.append('data', admin.eventDate.value);
+  formData.append('horario', admin.eventTime.value);
+  formData.append('local', admin.eventPlace.value);
+  formData.append('banner', admin.eventBanner.value.trim());
+  formData.append('descricao', admin.eventDescription.value);
+
+  if (file) {
+    formData.append('bannerArquivo', file);
+  }
+
+  return formData;
 }
 
 async function saveEvent(event) {
@@ -234,7 +320,7 @@ async function saveEvent(event) {
   try {
     await api(url, {
       method,
-      body: JSON.stringify(getEventPayload()),
+      body: getEventPayload(),
     });
 
     setMessage(admin.eventFormMessage, 'Evento salvo com sucesso.', 'success');
@@ -338,14 +424,19 @@ admin.navButtons.forEach((button) => {
 admin.newEventButton.addEventListener('click', () => openEventForm(null));
 admin.eventForm.addEventListener('submit', saveEvent);
 
-admin.eventBanner.addEventListener('change', () => {
-  admin.bannerPreview.src = admin.eventBanner.value || fallbackBannerAdmin;
+admin.eventBanner.addEventListener('input', () => {
+  if (admin.eventBanner.value.trim()) {
+    admin.eventBannerFile.value = '';
+  }
+  updateBannerPreview();
 });
 
-admin.bannerPreview.onerror = () => {
-  admin.bannerPreview.onerror = null;
-  admin.bannerPreview.src = fallbackBannerAdmin;
-};
+admin.eventBannerFile.addEventListener('change', () => {
+  if (admin.eventBannerFile.files[0]) {
+    admin.eventBanner.value = '';
+  }
+  updateBannerPreview();
+});
 
 document.querySelectorAll('[data-close-event-form]').forEach((button) => {
   button.addEventListener('click', closeEventForm);
@@ -393,8 +484,6 @@ admin.adminEventsTable.addEventListener('click', async (event) => {
 admin.presenceEventSelect.addEventListener('change', () => {
   loadPresences(admin.presenceEventSelect.value).catch((error) => alert(error.message));
 });
-
-renderBannerOptions();
 
 if (adminState.token) {
   showAuthenticated();

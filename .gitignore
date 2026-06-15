@@ -9,3 +9,6 @@ Thumbs.db
 npm-debug.log*
 
 prompt.txt
+
+public/assets/uploads/eventos/*
+!public/assets/uploads/eventos/.gitkeep

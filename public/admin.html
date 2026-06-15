@@ -4,13 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Administrador - Sistema de Eventos</title>
+    <link rel="icon" type="image/png" href="/assets/img/Icone.png" />
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body class="admin-page">
     <main id="loginScreen" class="login-screen">
       <section class="login-box" aria-labelledby="loginTitle">
+        <a class="login-close" href="/" aria-label="Voltar para o site">×</a>
         <div class="login-brand">
-          <span class="brand-mark large">AD</span>
+          <span class="brand-logo-wrap large">
+            <img class="brand-logo" src="/assets/img/Icone.png" alt="" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />
+            <span class="brand-mark large brand-fallback" hidden>AD</span>
+          </span>
           <h1 id="loginTitle">Assembleia de Deus</h1>
           <p>Área do Administrador</p>
         </div>
@@ -31,7 +36,10 @@
     <div id="adminShell" class="admin-shell" hidden>
       <aside class="admin-sidebar">
         <div class="sidebar-brand">
-          <span class="brand-mark">AD</span>
+          <span class="brand-logo-wrap">
+            <img class="brand-logo" src="/assets/img/Icone.png" alt="" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />
+            <span class="brand-mark brand-fallback" hidden>AD</span>
+          </span>
           <div>
             <strong>Administrador</strong>
             <small>Eventos da igreja</small>
@@ -52,7 +60,7 @@
             <p class="eyebrow dark">Painel administrativo</p>
             <h1>Sistema de Eventos</h1>
           </div>
-          <a class="secondary-button" href="/">Ver site</a>
+          <a class="secondary-button return-link" href="/">Voltar</a>
         </div>
 
         <section id="eventsSection" class="admin-section">
@@ -117,7 +125,7 @@
         <button class="icon-button modal-close" type="button" data-close-event-form aria-label="Fechar">×</button>
         <h2 id="eventFormTitle">Novo Evento</h2>
 
-        <form id="eventForm" class="stack-form">
+        <form id="eventForm" class="stack-form" enctype="multipart/form-data">
           <input id="eventId" type="hidden" />
 
           <label for="eventTitle">Título</label>
@@ -137,9 +145,17 @@
           <label for="eventPlace">Local</label>
           <input id="eventPlace" name="local" type="text" required />
 
-          <label for="eventBanner">Banner</label>
-          <select id="eventBanner" name="banner"></select>
-          <img id="bannerPreview" class="banner-preview" src="/assets/img/banner-eventos.jpeg" alt="" />
+          <label for="eventBanner">Banner (opcional)</label>
+          <div class="banner-field">
+            <input id="eventBanner" name="banner" type="text" placeholder="Cole uma URL ou deixe em branco" />
+            <input id="eventBannerFile" name="bannerArquivo" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+          </div>
+          <div class="banner-preview-wrap">
+            <img id="bannerPreview" class="banner-preview" src="/assets/img/banner-eventos.jpeg" alt="" />
+            <div id="bannerPreviewFallback" class="banner-fallback banner-preview-fallback" hidden>
+              <span>Banner do evento</span>
+            </div>
+          </div>
 
           <label for="eventDescription">Descrição</label>
           <textarea id="eventDescription" name="descricao" rows="5" required></textarea>
