@@ -1,4 +1,4 @@
-Sistema de Eventos da Assembleia de Deus
+\# Sistema de Eventos da Assembleia de Deus
 
 
 
@@ -6,33 +6,41 @@ Sistema web simples para gerenciamento de eventos da igreja, confirmação de pr
 
 
 
-Funcionalidades
+\## Funcionalidades
 
-Listagem pública de eventos
 
-Confirmação de presença
 
-Área administrativa
+\* Listagem pública de eventos
 
-Cadastro, edição e exclusão de eventos
+\* Confirmação de presença
 
-Upload de banner do evento
+\* Área administrativa
 
-Visualização de participantes confirmados
+\* Cadastro, edição e exclusão de eventos
 
-Máscara automática para telefone
+\* Upload de banner do evento
 
-Tecnologias
+\* Visualização de participantes confirmados
 
-HTML5
+\* Máscara automática para telefone
 
-CSS3
 
-JavaScript
 
-Node.js
+\## Tecnologias
 
-Express
 
-SQLite
+
+\* HTML5
+
+\* CSS3
+
+\* JavaScript
+
+\* Node.js
+
+\* Express
+
+\* SQLite
+
+
 
