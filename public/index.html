@@ -51,8 +51,27 @@
           <span id="eventCount" class="count-pill">0 eventos</span>
         </div>
 
+        <div class="records-toolbar">
+          <label class="search-field" for="eventSearch">
+            <span>Buscar evento</span>
+            <input id="eventSearch" type="search" placeholder="Nome do evento ou número da ordem" autocomplete="off" />
+          </label>
+        </div>
+
         <div id="loadingState" class="state-message">Carregando eventos...</div>
-        <div id="eventsGrid" class="event-grid" aria-live="polite"></div>
+        <div class="table-shell event-list-shell">
+          <table class="data-table event-records-table">
+            <thead>
+              <tr>
+                <th>Ordem</th>
+                <th>Evento</th>
+                <th>Data</th>
+              </tr>
+            </thead>
+            <tbody id="eventsTableBody" aria-live="polite"></tbody>
+          </table>
+        </div>
+        <div id="eventsPagination" class="pagination" aria-label="Paginação de eventos"></div>
       </section>
     </main>
 
@@ -124,7 +143,11 @@
           <section class="detail-main">
             <h2 id="modalTitle"></h2>
             <div id="modalMeta" class="meta-row"></div>
-            <p id="modalDescription" class="detail-description"></p>
+
+            <section class="detail-info" aria-labelledby="modalInfoTitle">
+              <h3 id="modalInfoTitle">Informações do Evento</h3>
+              <dl id="modalInfo" class="detail-list"></dl>
+            </section>
 
             <form id="presenceForm" class="presence-form">
               <input id="presenceEventId" type="hidden" />
@@ -136,13 +159,15 @@
                 </div>
               </div>
 
+              <p id="presenceWindowMessage" class="feedback presence-window-message" aria-live="polite"></p>
+
               <label for="presenceName">Nome completo *</label>
               <input id="presenceName" name="nome" type="text" autocomplete="name" placeholder="Digite seu nome completo" required />
 
               <label for="presencePhone">Telefone opcional</label>
               <input id="presencePhone" name="telefone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="15" placeholder="(00) 00000-0000" />
 
-              <button class="primary-button full" type="submit">Confirmar Presença</button>
+              <button id="presenceSubmitButton" class="primary-button full" type="submit">Confirmar Presença</button>
               <p id="presenceMessage" class="feedback" aria-live="polite"></p>
             </form>
           </section>

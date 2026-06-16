@@ -1,17 +1,27 @@
+const state = {
+  eventos: [],
+  page: 1,
+  pageSize: 8,
+};
+
 const elements = {
-  eventsGrid: document.querySelector('#eventsGrid'),
+  eventsTableBody: document.querySelector('#eventsTableBody'),
   loadingState: document.querySelector('#loadingState'),
   eventCount: document.querySelector('#eventCount'),
+  eventSearch: document.querySelector('#eventSearch'),
+  eventsPagination: document.querySelector('#eventsPagination'),
   modal: document.querySelector('#eventModal'),
   modalBanner: document.querySelector('#modalBanner'),
   modalDateBadge: document.querySelector('#modalDateBadge'),
   modalTitle: document.querySelector('#modalTitle'),
   modalMeta: document.querySelector('#modalMeta'),
-  modalDescription: document.querySelector('#modalDescription'),
+  modalInfo: document.querySelector('#modalInfo'),
   presenceForm: document.querySelector('#presenceForm'),
   presenceEventId: document.querySelector('#presenceEventId'),
   presenceName: document.querySelector('#presenceName'),
   presencePhone: document.querySelector('#presencePhone'),
+  presenceSubmitButton: document.querySelector('#presenceSubmitButton'),
+  presenceWindowMessage: document.querySelector('#presenceWindowMessage'),
   presenceMessage: document.querySelector('#presenceMessage'),
 };
 
@@ -26,6 +36,14 @@ function escapeHtml(value) {
     };
     return chars[char];
   });
+}
+
+function normalizeSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function imageUrl(evento) {
@@ -116,7 +134,7 @@ function isCompleteBrazilianPhone(value) {
 function formatDateParts(dateValue) {
   const date = new Date(`${dateValue}T00:00:00`);
   if (Number.isNaN(date.getTime())) {
-    return { day: '--', month: '---', full: dateValue || 'Data nao informada' };
+    return { day: '--', month: '---', full: dateValue || 'Data nao informada', short: dateValue || '-' };
   }
 
   return {
@@ -127,6 +145,7 @@ function formatDateParts(dateValue) {
       month: 'long',
       year: 'numeric',
     }).format(date),
+    short: new Intl.DateTimeFormat('pt-BR').format(date),
   };
 }
 
@@ -134,12 +153,20 @@ function formatTime(value) {
   return value || '--:--';
 }
 
-function summary(text) {
-  const clean = String(text || '').trim();
-  if (clean.length <= 120) {
-    return clean;
-  }
-  return `${clean.slice(0, 117)}...`;
+function formatEventTimeRange(evento) {
+  return `${formatTime(evento.horario)} às ${formatTime(evento.horarioFim)}`;
+}
+
+function orderCode(evento) {
+  return evento.codigoOrdem || `#${String(evento.id).padStart(4, '0')}`;
+}
+
+function statusClass(status) {
+  return normalizeSearch(status).replace(/\s+/g, '-');
+}
+
+function statusBadge(evento) {
+  return `<span class="status-badge is-${escapeHtml(statusClass(evento.status))}">${escapeHtml(evento.status)}</span>`;
 }
 
 function metaItem(text) {
@@ -159,40 +186,71 @@ function setFeedback(element, message, type) {
   }
 }
 
-function renderEvents(eventos) {
-  elements.loadingState.hidden = true;
-  elements.eventCount.textContent = `${eventos.length} ${eventos.length === 1 ? 'evento' : 'eventos'}`;
+function filteredEvents() {
+  const query = normalizeSearch(elements.eventSearch.value);
 
-  if (eventos.length === 0) {
-    elements.eventsGrid.innerHTML = '<div class="state-message">Nenhum evento cadastrado no momento.</div>';
+  if (!query) {
+    return state.eventos;
+  }
+
+  return state.eventos.filter((evento) => {
+    const searchable = normalizeSearch(`${orderCode(evento)} ${evento.titulo}`);
+    return searchable.includes(query);
+  });
+}
+
+function renderPagination(totalItems) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / state.pageSize));
+  state.page = Math.min(state.page, totalPages);
+
+  if (totalPages <= 1) {
+    elements.eventsPagination.innerHTML = '';
     return;
   }
 
-  elements.eventsGrid.innerHTML = eventos
+  elements.eventsPagination.innerHTML = `
+    <button class="small-button" type="button" data-page="${state.page - 1}" ${state.page === 1 ? 'disabled' : ''}>Anterior</button>
+    <span>Página ${state.page} de ${totalPages}</span>
+    <button class="small-button" type="button" data-page="${state.page + 1}" ${state.page === totalPages ? 'disabled' : ''}>Próxima</button>
+  `;
+}
+
+function renderEvents() {
+  const eventos = filteredEvents();
+  const totalPages = Math.max(1, Math.ceil(eventos.length / state.pageSize));
+  state.page = Math.min(state.page, totalPages);
+  const start = (state.page - 1) * state.pageSize;
+  const pageItems = eventos.slice(start, start + state.pageSize);
+
+  elements.loadingState.hidden = true;
+  elements.eventCount.textContent = `${eventos.length} ${eventos.length === 1 ? 'evento' : 'eventos'}`;
+  renderPagination(eventos.length);
+
+  if (state.eventos.length === 0) {
+    elements.eventsTableBody.innerHTML = '<tr><td colspan="3">Nenhum evento ativo no momento.</td></tr>';
+    return;
+  }
+
+  if (pageItems.length === 0) {
+    elements.eventsTableBody.innerHTML = '<tr><td colspan="3">Nenhum evento encontrado para a busca.</td></tr>';
+    return;
+  }
+
+  elements.eventsTableBody.innerHTML = pageItems
     .map((evento) => {
       const date = formatDateParts(evento.data);
-      const banner = imageUrl(evento);
-      const imageHidden = banner ? '' : 'hidden';
-      const imageSource = banner ? `src="${escapeHtml(banner)}"` : '';
-      const fallbackHidden = banner ? 'hidden' : '';
+
       return `
-        <article class="event-card">
-          <div class="event-card__image">
-            <img ${imageSource} alt="" data-title="${escapeHtml(evento.titulo)}" onerror="mostrarFallbackBanner(this)" ${imageHidden} />
-            <div class="banner-fallback" ${fallbackHidden}><span>${escapeHtml(evento.titulo)}</span></div>
-            <div class="date-badge">${dateBadge(evento)}</div>
-          </div>
-          <div class="event-card__body">
-            <h3>${escapeHtml(evento.titulo)}</h3>
-            <div class="meta-list">
-              ${metaItem(date.full)}
-              ${metaItem(formatTime(evento.horario))}
-              ${metaItem(evento.local)}
+        <tr class="clickable-row" data-event-id="${evento.id}" tabindex="0">
+          <td><strong class="order-code">${escapeHtml(orderCode(evento))}</strong></td>
+          <td>
+            <div class="event-record-title">
+              <strong>${escapeHtml(evento.titulo)}</strong>
+              ${statusBadge(evento)}
             </div>
-            <p class="event-summary">${escapeHtml(summary(evento.descricao))}</p>
-            <button class="primary-button full" type="button" data-event-id="${evento.id}">Ver Evento</button>
-          </div>
-        </article>
+          </td>
+          <td>${escapeHtml(date.short)}</td>
+        </tr>
       `;
     })
     .join('');
@@ -205,12 +263,26 @@ async function loadEvents() {
       throw new Error('Nao foi possivel carregar os eventos.');
     }
 
-    const eventos = await response.json();
-    renderEvents(eventos);
+    state.eventos = await response.json();
+    renderEvents();
   } catch (error) {
     elements.loadingState.textContent = error.message;
     elements.loadingState.hidden = false;
   }
+}
+
+function setPresenceAvailability(evento) {
+  const disabled = !evento.presencaDisponivel;
+  elements.presenceName.disabled = disabled;
+  elements.presencePhone.disabled = disabled;
+  elements.presenceSubmitButton.disabled = disabled;
+
+  if (evento.mensagemPresenca) {
+    setFeedback(elements.presenceWindowMessage, evento.mensagemPresenca, 'error');
+    return;
+  }
+
+  setFeedback(elements.presenceWindowMessage, '', '');
 }
 
 async function openEvent(eventId) {
@@ -225,24 +297,43 @@ async function openEvent(eventId) {
     const date = formatDateParts(evento.data);
     setBannerImage(elements.modalBanner, imageUrl(evento), evento.titulo);
     elements.modalDateBadge.innerHTML = dateBadge(evento);
-    elements.modalTitle.textContent = evento.titulo;
+    elements.modalTitle.textContent = `${orderCode(evento)} - ${evento.titulo}`;
     elements.modalMeta.innerHTML = [
       metaItem(date.full),
-      metaItem(formatTime(evento.horario)),
+      metaItem(formatEventTimeRange(evento)),
       metaItem(evento.local),
+      statusBadge(evento),
     ].join('');
-    elements.modalDescription.textContent = evento.descricao;
-    elements.presenceEventId.value = evento.id;
+    elements.modalInfo.innerHTML = `
+      <dt>Número da Ordem</dt>
+      <dd>${escapeHtml(orderCode(evento))}</dd>
+      <dt>Nome</dt>
+      <dd>${escapeHtml(evento.titulo)}</dd>
+      <dt>Data</dt>
+      <dd>${escapeHtml(date.short)}</dd>
+      <dt>Horário</dt>
+      <dd>${escapeHtml(formatEventTimeRange(evento))}</dd>
+      <dt>Local</dt>
+      <dd>${escapeHtml(evento.local)}</dd>
+      <dt>Descrição</dt>
+      <dd>${escapeHtml(evento.descricao)}</dd>
+    `;
+
     elements.presenceForm.reset();
     elements.presenceEventId.value = evento.id;
     setFeedback(elements.presenceMessage, '', '');
+    setPresenceAvailability(evento);
 
     elements.modal.classList.add('is-open');
     elements.modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
-    elements.presenceName.focus();
+
+    if (evento.presencaDisponivel) {
+      elements.presenceName.focus();
+    }
   } catch (error) {
     alert(error.message);
+    await loadEvents();
   }
 }
 
@@ -254,6 +345,11 @@ function closeModal() {
 
 async function submitPresence(event) {
   event.preventDefault();
+
+  if (elements.presenceSubmitButton.disabled) {
+    return;
+  }
+
   setFeedback(elements.presenceMessage, 'Registrando presença...', '');
 
   const telefone = formatBrazilianPhone(elements.presencePhone.value);
@@ -284,13 +380,15 @@ async function submitPresence(event) {
 
     elements.presenceName.value = '';
     elements.presencePhone.value = '';
-    setFeedback(
-      elements.presenceMessage,
-      'Presença confirmada com sucesso! Esperamos você no evento.',
-      'success',
-    );
+    setFeedback(elements.presenceMessage, 'Presença confirmada com sucesso! Esperamos você no evento.', 'success');
   } catch (error) {
     setFeedback(elements.presenceMessage, error.message, 'error');
+    if (error.message === 'Este evento já foi encerrado.') {
+      elements.presenceSubmitButton.disabled = true;
+      elements.presenceName.disabled = true;
+      elements.presencePhone.disabled = true;
+      await loadEvents();
+    }
   }
 }
 
@@ -324,11 +422,34 @@ function handlePhonePaste(event) {
   elements.presencePhone.value = formatBrazilianPhone(pasted);
 }
 
-elements.eventsGrid.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-event-id]');
-  if (button) {
-    openEvent(button.dataset.eventId);
+elements.eventsTableBody.addEventListener('click', (event) => {
+  const row = event.target.closest('[data-event-id]');
+  if (row) {
+    openEvent(row.dataset.eventId);
   }
+});
+
+elements.eventsTableBody.addEventListener('keydown', (event) => {
+  const row = event.target.closest('[data-event-id]');
+  if (row && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    openEvent(row.dataset.eventId);
+  }
+});
+
+elements.eventsPagination.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-page]');
+  if (!button || button.disabled) {
+    return;
+  }
+
+  state.page = Number(button.dataset.page);
+  renderEvents();
+});
+
+elements.eventSearch.addEventListener('input', () => {
+  state.page = 1;
+  renderEvents();
 });
 
 document.querySelectorAll('[data-close-modal]').forEach((button) => {
@@ -346,3 +467,4 @@ elements.presencePhone.addEventListener('input', handlePhoneInput);
 elements.presencePhone.addEventListener('keydown', handlePhoneKeydown);
 elements.presencePhone.addEventListener('paste', handlePhonePaste);
 loadEvents();
+setInterval(loadEvents, 60000);

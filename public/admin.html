@@ -47,8 +47,8 @@
         </div>
 
         <nav class="admin-nav" aria-label="Menu administrativo">
-          <button class="nav-button is-active" type="button" data-section="eventsSection">Eventos</button>
-          <button class="nav-button" type="button" data-section="presencesSection">Presenças</button>
+          <button class="nav-button is-active" type="button" data-section="activeEventsSection">Eventos Ativos</button>
+          <button class="nav-button" type="button" data-section="archivedEventsSection">Eventos Arquivados</button>
         </nav>
 
         <button id="logoutButton" class="ghost-button logout-button" type="button">Sair</button>
@@ -63,58 +63,109 @@
           <a class="secondary-button return-link" href="/">Voltar</a>
         </div>
 
-        <section id="eventsSection" class="admin-section">
+        <section id="activeEventsSection" class="admin-section">
           <div class="panel-heading">
             <div>
-              <h2>Eventos</h2>
-              <p>Crie, edite e acompanhe os eventos cadastrados.</p>
+              <h2>Eventos Ativos</h2>
+              <p>Eventos futuros e em andamento.</p>
             </div>
             <button id="newEventButton" class="primary-button" type="button">+ Novo Evento</button>
           </div>
 
+          <div class="records-toolbar">
+            <label class="search-field" for="activeEventSearch">
+              <span>Buscar evento</span>
+              <input id="activeEventSearch" type="search" placeholder="Nome do evento ou número da ordem" autocomplete="off" />
+            </label>
+          </div>
+
           <div class="table-shell">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Imagem</th>
-                  <th>Título</th>
+                  <th>Ordem</th>
+                  <th>Evento</th>
                   <th>Data</th>
-                  <th>Horário</th>
-                  <th>Local</th>
+                  <th>Status</th>
                   <th>Ações</th>
                 </tr>
               </thead>
-              <tbody id="adminEventsTable"></tbody>
+              <tbody id="adminActiveEventsTable"></tbody>
             </table>
           </div>
+          <div id="activeEventsPagination" class="pagination" aria-label="Paginação de eventos ativos"></div>
         </section>
 
-        <section id="presencesSection" class="admin-section" hidden>
+        <section id="archivedEventsSection" class="admin-section" hidden>
           <div class="panel-heading">
             <div>
-              <h2>Presenças</h2>
-              <p id="presenceSubtitle">Selecione um evento para visualizar os participantes.</p>
+              <h2>Eventos Arquivados</h2>
+              <p>Eventos encerrados com histórico de presenças preservado.</p>
             </div>
-            <select id="presenceEventSelect" class="compact-select" aria-label="Selecionar evento"></select>
           </div>
 
-          <div class="stats-strip">
-            <span>Participantes Confirmados</span>
-            <strong id="presenceTotal">Total de Confirmados: 0</strong>
+          <div class="records-toolbar">
+            <label class="search-field" for="archivedEventSearch">
+              <span>Buscar evento</span>
+              <input id="archivedEventSearch" type="search" placeholder="Nome do evento ou número da ordem" autocomplete="off" />
+            </label>
           </div>
 
           <div class="table-shell">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Nome</th>
-                  <th>Telefone</th>
-                  <th>Data da Confirmação</th>
+                  <th>Ordem</th>
+                  <th>Evento</th>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
-              <tbody id="presencesTable"></tbody>
+              <tbody id="adminArchivedEventsTable"></tbody>
             </table>
           </div>
+          <div id="archivedEventsPagination" class="pagination" aria-label="Paginação de eventos arquivados"></div>
+        </section>
+      </section>
+    </div>
+
+    <div id="adminEventDetailModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="adminDetailTitle">
+      <div class="modal-backdrop" data-close-admin-detail></div>
+      <section class="modal-panel admin-detail-modal">
+        <button class="icon-button modal-close" type="button" data-close-admin-detail aria-label="Fechar">×</button>
+
+        <section class="detail-main">
+          <h2 id="adminDetailTitle"></h2>
+          <div id="adminDetailMeta" class="meta-row"></div>
+
+          <section class="detail-info" aria-labelledby="adminDetailInfoTitle">
+            <h3 id="adminDetailInfoTitle">Informações do Evento</h3>
+            <dl id="adminDetailInfo" class="detail-list"></dl>
+          </section>
+
+          <section class="presence-roll" aria-labelledby="adminPresenceTitle">
+            <div class="presence-roll-heading">
+              <div>
+                <h3 id="adminPresenceTitle">Presenças</h3>
+                <p>Lista de pessoas que confirmaram presença neste evento.</p>
+              </div>
+              <strong id="adminPresenceTotal">Total de Confirmados: 0</strong>
+            </div>
+
+            <div class="table-shell presence-table-shell">
+              <table class="data-table presence-list-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Telefone</th>
+                    <th>Data Confirmação</th>
+                  </tr>
+                </thead>
+                <tbody id="adminDetailPresencesTable"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </section>
     </div>
@@ -139,6 +190,10 @@
             <div>
               <label for="eventTime">Horário</label>
               <input id="eventTime" name="horario" type="time" required />
+            </div>
+            <div>
+              <label for="eventEndTime">Horário final</label>
+              <input id="eventEndTime" name="horarioFim" type="time" required />
             </div>
           </div>
 

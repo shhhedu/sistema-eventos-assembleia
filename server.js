@@ -33,6 +33,108 @@ function cleanLongText(value) {
   return String(value || '').trim();
 }
 
+function isDateValue(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+}
+
+function isTimeValue(value) {
+  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    return false;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
+function eventDateTime(data, horario) {
+  return `${data}T${horario}:00`;
+}
+
+function eventWindow(evento) {
+  const horarioFim = evento.horarioFim || '23:59';
+  const dataHoraInicio = eventDateTime(evento.data, evento.horario);
+  const dataHoraFim = eventDateTime(evento.data, horarioFim);
+
+  return {
+    dataHoraInicio,
+    dataHoraFim,
+    inicio: new Date(dataHoraInicio),
+    fim: new Date(dataHoraFim),
+    horarioFim,
+  };
+}
+
+function orderCode(id) {
+  return `#${String(id).padStart(4, '0')}`;
+}
+
+function eventAvailability(evento, now = new Date()) {
+  const { inicio, fim } = eventWindow(evento);
+
+  if (now > fim) {
+    return {
+      arquivado: true,
+      presencaDisponivel: false,
+      status: 'Arquivado',
+      mensagemPresenca: 'Este evento já foi encerrado.',
+    };
+  }
+
+  if (now < inicio) {
+    return {
+      arquivado: false,
+      presencaDisponivel: false,
+      status: 'Ativo',
+      mensagemPresenca: 'O evento ainda não começou.',
+    };
+  }
+
+  return {
+    arquivado: false,
+    presencaDisponivel: true,
+    status: 'Em Andamento',
+    mensagemPresenca: '',
+  };
+}
+
+function decorateEvent(evento) {
+  const window = eventWindow(evento);
+  const availability = eventAvailability(evento);
+
+  return {
+    ...evento,
+    horarioFim: window.horarioFim,
+    codigoOrdem: orderCode(evento.id),
+    dataHoraInicio: window.dataHoraInicio,
+    dataHoraFim: window.dataHoraFim,
+    ...availability,
+  };
+}
+
+function sortEventsByDate(eventos) {
+  return eventos.sort((a, b) => {
+    const dateDiff = new Date(a.dataHoraInicio) - new Date(b.dataHoraInicio);
+
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+
+    return a.id - b.id;
+  });
+}
+
+function loadEvents() {
+  return sortEventsByDate(all('SELECT * FROM eventos').map(decorateEvent));
+}
+
 function sanitizeFileName(value) {
   return String(value || 'banner')
     .normalize('NFD')
@@ -141,27 +243,51 @@ function validateEventPayload(body) {
     descricao: cleanLongText(body.descricao),
     data: cleanText(body.data),
     horario: cleanText(body.horario),
+    horarioFim: cleanText(body.horarioFim || body.horarioFinal || body.horarioTermino),
     local: cleanText(body.local),
     banner: cleanText(body.banner),
   };
 
-  if (!evento.titulo || !evento.descricao || !evento.data || !evento.horario || !evento.local) {
-    return { error: 'Preencha titulo, descricao, data, horario e local.' };
+  if (
+    !evento.titulo ||
+    !evento.descricao ||
+    !evento.data ||
+    !evento.horario ||
+    !evento.horarioFim ||
+    !evento.local
+  ) {
+    return { error: 'Preencha titulo, descricao, data, horario inicial, horario final e local.' };
+  }
+
+  if (!isDateValue(evento.data) || !isTimeValue(evento.horario) || !isTimeValue(evento.horarioFim)) {
+    return { error: 'Informe uma data e horarios validos para o evento.' };
+  }
+
+  const { inicio, fim } = eventWindow(evento);
+
+  if (fim <= inicio) {
+    return { error: 'O horario final deve ser posterior ao horario inicial.' };
   }
 
   return { evento };
 }
 
 app.get('/api/eventos', (req, res) => {
-  const eventos = all('SELECT * FROM eventos ORDER BY data ASC, horario ASC, id ASC');
+  const eventos = loadEvents().filter((evento) => !evento.arquivado);
   res.json(eventos);
 });
 
 app.get('/api/eventos/:id', (req, res) => {
-  const evento = get('SELECT * FROM eventos WHERE id = ?', [Number(req.params.id)]);
+  const row = get('SELECT * FROM eventos WHERE id = ?', [Number(req.params.id)]);
 
-  if (!evento) {
+  if (!row) {
     return res.status(404).json({ error: 'Evento nao encontrado.' });
+  }
+
+  const evento = decorateEvent(row);
+
+  if (evento.arquivado) {
+    return res.status(410).json({ error: 'Este evento já foi encerrado.' });
   }
 
   return res.json(evento);
@@ -182,9 +308,15 @@ app.post('/api/presencas', (req, res) => {
     return res.status(400).json({ error: 'Informe o evento e o nome completo.' });
   }
 
-  const evento = get('SELECT id FROM eventos WHERE id = ?', [eventoId]);
-  if (!evento) {
+  const row = get('SELECT * FROM eventos WHERE id = ?', [eventoId]);
+  if (!row) {
     return res.status(404).json({ error: 'Evento nao encontrado.' });
+  }
+
+  const evento = decorateEvent(row);
+
+  if (!evento.presencaDisponivel) {
+    return res.status(evento.arquivado ? 410 : 403).json({ error: evento.mensagemPresenca });
   }
 
   const nomeNormalizado = normalizeName(nome);
@@ -222,6 +354,20 @@ app.post('/api/admin/login', (req, res) => {
   return res.status(401).json({ error: 'Usuario ou senha invalidos.' });
 });
 
+app.get('/api/admin/eventos', requireAdmin, (req, res) => {
+  res.json(loadEvents());
+});
+
+app.get('/api/admin/eventos/:id', requireAdmin, (req, res) => {
+  const evento = get('SELECT * FROM eventos WHERE id = ?', [Number(req.params.id)]);
+
+  if (!evento) {
+    return res.status(404).json({ error: 'Evento nao encontrado.' });
+  }
+
+  return res.json(decorateEvent(evento));
+});
+
 app.post('/api/admin/eventos', requireAdmin, parseEventUpload, (req, res) => {
   const { evento, error } = validateEventPayload(req.body);
 
@@ -232,12 +378,12 @@ app.post('/api/admin/eventos', requireAdmin, parseEventUpload, (req, res) => {
 
   const banner = uploadedBannerPath(req.file) || evento.banner;
   const result = run(
-    `INSERT INTO eventos (titulo, descricao, data, horario, local, banner)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, banner],
+    `INSERT INTO eventos (titulo, descricao, data, horario, horarioFim, local, banner)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.horarioFim, evento.local, banner],
   );
 
-  return res.status(201).json({ id: result.id, ...evento, banner });
+  return res.status(201).json(decorateEvent({ id: result.id, ...evento, banner }));
 });
 
 app.put('/api/admin/eventos/:id', requireAdmin, parseEventUpload, (req, res) => {
@@ -260,12 +406,12 @@ app.put('/api/admin/eventos/:id', requireAdmin, parseEventUpload, (req, res) => 
 
   run(
     `UPDATE eventos
-     SET titulo = ?, descricao = ?, data = ?, horario = ?, local = ?, banner = ?
+     SET titulo = ?, descricao = ?, data = ?, horario = ?, horarioFim = ?, local = ?, banner = ?
      WHERE id = ?`,
-    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, banner, id],
+    [evento.titulo, evento.descricao, evento.data, evento.horario, evento.horarioFim, evento.local, banner, id],
   );
 
-  return res.json({ id, ...evento, banner });
+  return res.json(decorateEvent({ id, ...evento, banner }));
 });
 
 app.delete('/api/admin/eventos/:id', requireAdmin, (req, res) => {
@@ -294,7 +440,7 @@ app.get('/api/admin/eventos/:id/presencas', requireAdmin, (req, res) => {
   );
 
   return res.json({
-    evento,
+    evento: decorateEvent(evento),
     total: presencas.length,
     presencas,
   });

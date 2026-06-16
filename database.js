@@ -59,6 +59,26 @@ function run(sql, params = []) {
   return { id, changes };
 }
 
+function hasColumn(table, column) {
+  return all(`PRAGMA table_info(${table})`).some((item) => item.name === column);
+}
+
+function defaultEndTime(horario) {
+  const match = String(horario || '').match(/^(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    return '23:59';
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const total = Math.min(hours * 60 + minutes + 120, 23 * 60 + 59);
+  const endHours = String(Math.floor(total / 60)).padStart(2, '0');
+  const endMinutes = String(total % 60).padStart(2, '0');
+
+  return `${endHours}:${endMinutes}`;
+}
+
 async function initDatabase() {
   const SQL = await initSqlJs({
     locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
@@ -79,6 +99,7 @@ async function initDatabase() {
       descricao TEXT NOT NULL,
       data TEXT NOT NULL,
       horario TEXT NOT NULL,
+      horarioFim TEXT NOT NULL DEFAULT '23:59',
       local TEXT NOT NULL,
       banner TEXT NOT NULL
     );
@@ -97,6 +118,13 @@ async function initDatabase() {
 
   database.run('CREATE INDEX IF NOT EXISTS idx_presencas_evento ON presencas(eventoId);');
 
+  if (!hasColumn('eventos', 'horarioFim')) {
+    database.run("ALTER TABLE eventos ADD COLUMN horarioFim TEXT NOT NULL DEFAULT '23:59'");
+    all('SELECT id, horario FROM eventos').forEach((evento) => {
+      database.run('UPDATE eventos SET horarioFim = ? WHERE id = ?', [defaultEndTime(evento.horario), evento.id]);
+    });
+  }
+
   const total = get('SELECT COUNT(*) AS total FROM eventos').total;
 
   if (total === 0) {
@@ -105,6 +133,7 @@ async function initDatabase() {
         titulo: 'Culto da Familia',
         data: '2026-06-21',
         horario: '19:30',
+        horarioFim: '21:30',
         local: 'Templo Sede',
         banner: '/assets/img/banner-culto-familia.jpeg',
         descricao:
@@ -114,6 +143,7 @@ async function initDatabase() {
         titulo: 'Escola Biblica Dominical',
         data: '2026-06-28',
         horario: '09:00',
+        horarioFim: '11:00',
         local: 'Salas da Escola Biblica',
         banner: '/assets/img/banner-eventos.jpeg',
         descricao:
@@ -123,6 +153,7 @@ async function initDatabase() {
         titulo: 'Culto de Jovens',
         data: '2026-07-05',
         horario: '18:00',
+        horarioFim: '20:00',
         local: 'Templo Sede',
         banner: '/assets/img/banner-eventos.jpeg',
         descricao:
@@ -132,9 +163,17 @@ async function initDatabase() {
 
     eventos.forEach((evento) => {
       database.run(
-        `INSERT INTO eventos (titulo, descricao, data, horario, local, banner)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [evento.titulo, evento.descricao, evento.data, evento.horario, evento.local, evento.banner],
+        `INSERT INTO eventos (titulo, descricao, data, horario, horarioFim, local, banner)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          evento.titulo,
+          evento.descricao,
+          evento.data,
+          evento.horario,
+          evento.horarioFim,
+          evento.local,
+          evento.banner,
+        ],
       );
     });
   }
